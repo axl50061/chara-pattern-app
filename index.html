@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>キャラ生成パターンピッカー</title>
+<style>
+:root{--bg:#f4f4f7;--card:#fff;--fg:#1b1b22;--sub:#666;--ac:#6b4cff;--chip:#ececf3;--bd:#ddd}
+@media(prefers-color-scheme:dark){:root{--bg:#121218;--card:#1e1e28;--fg:#eee;--sub:#aaa;--ac:#9c86ff;--chip:#2c2c3a;--bd:#333}}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;background:var(--bg);color:var(--fg);padding-bottom:210px}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 12px;border-bottom:1px solid var(--bd)}
+h1{font-size:18px;margin:0 0 8px}
+.genres{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.genres button{flex:none}
+button{font:inherit;min-height:44px;padding:8px 14px;border-radius:12px;border:1px solid var(--bd);background:var(--chip);color:var(--fg);cursor:pointer}
+button.on,.chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+main{padding:10px;max-width:800px;margin:auto}
+.card{background:var(--card);border-radius:14px;margin:10px 0;border:1px solid var(--bd);overflow:hidden}
+.card>summary{list-style:none;padding:14px;font-weight:700;font-size:16px;display:flex;justify-content:space-between;cursor:pointer;min-height:48px}
+.card>summary::-webkit-details-marker{display:none}
+.cnt{color:var(--ac);font-weight:400}
+.body{padding:0 12px 14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{position:relative}
+.chip .x{margin-left:6px;opacity:.7}
+.add{display:flex;gap:6px;margin-top:10px}
+.add input{flex:1;min-height:44px;font:inherit;padding:8px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--fg)}
+.drop{margin-top:10px;border:2px dashed var(--bd);border-radius:12px;padding:10px;text-align:center}
+.drop.hover{border-color:var(--ac)}
+.up{width:100%;min-height:56px;font-size:16px;background:var(--ac);color:#fff;border:none}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.th{position:relative;width:84px;height:84px}
+.th img{width:100%;height:100%;object-fit:cover;border-radius:8px}
+.th button{position:absolute;top:-6px;right:-6px;min-height:32px;width:32px;padding:0;border-radius:50%;background:#e33;color:#fff;border:none}
+.hint{color:var(--sub);font-size:12px}
+.tools{display:flex;flex-wrap:wrap;gap:8px}
+footer{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--bd);padding:10px 12px calc(10px + env(safe-area-inset-bottom));z-index:9}
+#prompt{max-height:90px;overflow:auto;font-size:14px;white-space:pre-wrap;word-break:break-all;margin-bottom:8px;min-height:20px}
+.row{display:flex;gap:6px}.row button{flex:1}
+#toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:var(--ac);color:#fff;padding:10px 18px;border-radius:20px;display:none;z-index:20}
+</style></head><body>
+<header><h1>🎮 キャラ生成パターンピッカー</h1><div class="genres" id="genres"></div></header>
+<main>
+<details class="card" open><summary>🖼 全体の参考画像 <span class="cnt" id="gcnt"></span></summary><div class="body" id="globalRef"></div></details>
+<div id="cats"></div>
+<details class="card"><summary>💾 プリセット・データ管理</summary><div class="body">
+<div class="tools"><button id="savePre">プリセット保存</button><button id="clearSel">選択をクリア</button><button id="exp">JSONエクスポート</button><button id="impB">JSONインポート</button><input type="file" id="imp" accept="application/json,.json" hidden></div>
+<h3 style="font-size:15px">保存済みプリセット</h3><div class="chips" id="presets"></div><p class="hint">タップで読み込み、×で削除</p></div></details>
+</main>
+<footer><div id="prompt"></div><div class="row"><button id="copy" class="on">📋 コピー</button><button id="savePre2">保存</button><button id="loadPre">読込</button></div></footer>
+<div id="toast"></div>
+<script>
+const GENRES=["ファンタジー","SF","和風","サイバーパンク","異形・クリーチャー","ポストアポカリプス","ほのぼの"];
+const CATS=["画風","種族","頭部","顔","髪型","胴体","肩","腕","手","腰・股関節","脚","足","素材","色・模様","装飾品","武器","ポーズ","背景"];
+const C={"画風":"アニメ調,厚塗り,セル画風,水彩風,ゲームCG風","種族":"人間,獣人","頭部":"ヘルメット,フード,無帽,ヘッドギア","顔":"凛々しい,無表情,笑顔,傷あり,マスク","髪型":"ロングヘア,ショートヘア,ポニーテール,ツインテール,ボブ","胴体":"軽装鎧,ジャケット,ボディスーツ,ローブ","肩":"肩当て,マント付き,露出なし,非対称の肩装甲","腕":"ガントレット,袖なし,長袖,包帯","手":"グローブ,素手,指ぬきグローブ,爪","腰・股関節":"ハイレグ型の切れ込み,装甲の切れ目から肌が見える,ベルト多重,腰布,プリーツスカート,スリット入りスカート","脚":"タイツ,レギンス,脚甲,ニーハイソックス","足":"ブーツ,サンダル,裸足,鉄靴","素材":"金属,革,布,ラテックス風,樹脂","色・模様":"モノトーン,ビビッド,迷彩,ストライプ,グラデーション","装飾品":"ネックレス,イヤリング,ゴーグル,チョーカー","武器":"剣,弓,銃,杖,素手","ポーズ":"立ちポーズ,戦闘態勢,振り返り,座り,ジャンプ","背景":"白背景,単色背景,街並み,荒野,室内"};
+const G={
+"ファンタジー":{"画風":"重厚なファンタジーアート","種族":"エルフ,ドワーフ,竜人,妖精","頭部":"ティアラ,角飾り","胴体":"板金鎧,魔導士ローブ","素材":"ミスリル,竜鱗","装飾品":"魔石のペンダント,ルーン刻印","武器":"大剣,魔導書,槍","背景":"古城,魔法の森,ダンジョン"},
+"SF":{"画風":"ハードSFメカデザイン","種族":"アンドロイド,異星人,強化人間","頭部":"バイザー,HUDヘルメット","胴体":"パワードスーツ,宇宙服","素材":"カーボン,発光パネル","武器":"レーザーライフル,ビームサーベル","背景":"宇宙ステーション,異星の地表"},
+"和風":{"画風":"浮世絵風,日本画風","種族":"鬼,狐娘,天狗,人間(侍)","頭部":"兜,笠,狐面","髪型":"髷,姫カット","胴体":"着物,袴,当世具足","素材":"和紙,漆,絹","色・模様":"麻の葉,青海波,桜柄","武器":"刀,薙刀,扇,苦無","背景":"神社,竹林,城下町"},
+"サイバーパンク":{"画風":"ネオン強調","種族":"サイボーグ,ハッカー","頭部":"ネオンゴーグル,サイバーウェア露出","髪型":"蛍光カラーのアシンメトリー","胴体":"テックウェアジャケット","腕":"義手(機械腕)","素材":"クロム,ホログラム素材","色・模様":"ネオンピンク×シアン,グリッチ柄","武器":"スマートガン,モノワイヤー","背景":"雨のネオン街,高層スラム"},
+"異形・クリーチャー":{"画風":"ダークファンタジー,クリーチャーデザイン","種族":"キメラ,触手生物,昆虫型,不定形","頭部":"多眼,複数の角,頭部なし(発光核)","顔":"口が裂けた,仮面状の外殻","腕":"多腕,刃状の腕","手":"鉤爪,触手指","脚":"逆関節,多脚","素材":"外骨格,粘膜質,骨","背景":"異界,廃墟の地下"},
+"ポストアポカリプス":{"画風":"荒廃したリアル調","種族":"生存者,ミュータント","頭部":"ガスマスク,防塵ゴーグル","胴体":"継ぎ接ぎの防護服,スクラップアーマー","素材":"錆びた鉄,ボロ布,タイヤゴム","色・模様":"砂埃色,錆色","武器":"パイプ武器,改造ショットガン","背景":"崩壊都市,砂漠化した荒野"},
+"ほのぼの":{"画風":"ゆるかわ,パステル絵本風","種族":"ちびキャラ,動物の子,精霊","顔":"にっこり,ほっぺ赤","胴体":"エプロン,オーバーオール","素材":"フェルト,ニット","色・模様":"パステル,水玉,チェック","装飾品":"花冠,リボン","武器":"おたま,じょうろ,なし","ポーズ":"お昼寝,手を振る","背景":"花畑,小さな村,カフェ"}};
+const LS="charaPicker.v1";
+let S=JSON.parse(localStorage.getItem(LS)||"null")||{genre:GENRES[0],sel:{},custom:{},presets:{}};
+const save=()=>localStorage.setItem(LS,JSON.stringify(S));
+const $=s=>document.querySelector(s);
+const el=(t,p={},...k)=>{const e=document.createElement(t);Object.assign(e,p);k.forEach(c=>e.append(c));return e};
+const toast=m=>{const t=$("#toast");t.textContent=m;t.style.display="block";clearTimeout(t._);t._=setTimeout(()=>t.style.display="none",1500)};
+// IndexedDB
+let db;const dbp=new Promise((res,rej)=>{const r=indexedDB.open("charaPickerImg",1);r.onupgradeneeded=()=>r.result.createObjectStore("img",{keyPath:"id"});r.onsuccess=()=>{db=r.result;res()};r.onerror=rej});
+const tx=m=>db.transaction("img",m).objectStore("img");
+const idb=(req)=>new Promise((r,j)=>{req.onsuccess=()=>r(req.result);req.onerror=j});
+const allImg=()=>idb(tx("readonly").getAll());
+const fileToData=f=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)});
+async function addFiles(cat,files){for(const f of files){if(!f.type.startsWith("image/"))continue;await idb(tx("readwrite").put({id:Date.now()+"-"+Math.random(),cat,name:f.name,data:await fileToData(f)}))}renderImgs()}
+function opts(cat){const a=(C[cat]||"").split(","),b=((G[S.genre]||{})[cat]||"").split(",").filter(Boolean);return [...new Set([...b,...a,...(S.custom[cat]||[])])]}
+function renderGenres(){const g=$("#genres");g.innerHTML="";GENRES.forEach(n=>g.append(el("button",{textContent:n,className:n==S.genre?"on":"",onclick:()=>{S.genre=n;save();renderAll()}})))}
+function refBox(cat){const inp=el("input",{type:"file",accept:"image/*",multiple:true,hidden:true,onchange:e=>{addFiles(cat,e.target.files);e.target.value=""}});
+const d=el("div",{className:"drop"},el("button",{className:"up",textContent:"📷 参考画像を追加(カメラ/ギャラリー)",onclick:()=>inp.click()}),inp,el("div",{className:"hint",textContent:"PCではここにドラッグ&ドロップも可"}),el("div",{className:"thumbs"}));d.querySelector(".thumbs").dataset.cat=cat;
+d.ondragover=e=>{e.preventDefault();d.classList.add("hover")};d.ondragleave=()=>d.classList.remove("hover");d.ondrop=e=>{e.preventDefault();d.classList.remove("hover");addFiles(cat,e.dataTransfer.files)};return d}
+const openState={};
+function renderCats(){const w=$("#cats");w.querySelectorAll("details").forEach(d=>openState[d.dataset.cat]=d.open);w.innerHTML="";
+CATS.forEach(cat=>{const sel=S.sel[cat]||[];const chips=el("div",{className:"chips"});
+opts(cat).forEach(o=>{const on=sel.includes(o),cu=(S.custom[cat]||[]).includes(o);const b=el("button",{className:"chip"+(on?" on":""),textContent:o});
+b.onclick=()=>{const s=S.sel[cat]=S.sel[cat]||[];const i=s.indexOf(o);i<0?s.push(o):s.splice(i,1);save();renderCats();renderPrompt()};
+if(cu){const x=el("span",{className:"x",textContent:"✕",onclick:e=>{e.stopPropagation();S.custom[cat]=S.custom[cat].filter(v=>v!=o);S.sel[cat]=(S.sel[cat]||[]).filter(v=>v!=o);save();renderCats();renderPrompt()}});b.append(x)}chips.append(b)});
+const inp=el("input",{placeholder:"自分で追加…"});const add=()=>{const v=inp.value.trim();if(!v)return;(S.custom[cat]=S.custom[cat]||[]).includes(v)||S.custom[cat].push(v);(S.sel[cat]=S.sel[cat]||[]).includes(v)||S.sel[cat].push(v);save();renderCats();renderPrompt()};inp.onkeydown=e=>{if(e.key=="Enter")add()};
+const d=el("details",{className:"card",open:!!openState[cat]},el("summary",{},el("span",{textContent:cat}),el("span",{className:"cnt",textContent:sel.length?sel.length+"件選択":""})),el("div",{className:"body"},chips,el("div",{className:"add"},inp,el("button",{textContent:"追加",onclick:add})),refBox(cat)));d.dataset.cat=cat;w.append(d)});renderImgs()}
+async function renderImgs(){await dbp;const imgs=await allImg();document.querySelectorAll(".thumbs").forEach(t=>{t.innerHTML="";imgs.filter(i=>i.cat==t.dataset.cat).forEach(i=>t.append(el("div",{className:"th"},el("img",{src:i.data,alt:i.name}),el("button",{textContent:"✕",ariaLabel:"削除",onclick:async()=>{if(confirm("この画像を削除しますか?")){await idb(tx("readwrite").delete(i.id));renderImgs()}}}))))});$("#gcnt").textContent=imgs.filter(i=>i.cat=="__global").length+"枚"}
+function promptText(){return CATS.flatMap(c=>S.sel[c]||[]).join(" × ")}
+function renderPrompt(){$("#prompt").textContent=promptText()||"(チップをタップして選択)"}
+function renderPresets(){const p=$("#presets");p.innerHTML="";Object.keys(S.presets).forEach(n=>{const b=el("button",{className:"chip",textContent:n,onclick:()=>loadPreset(n)});b.append(el("span",{className:"x",textContent:"✕",onclick:e=>{e.stopPropagation();if(confirm(n+" を削除?")){delete S.presets[n];save();renderPresets()}}}));p.append(b)})}
+function loadPreset(n){const p=S.presets[n];if(!p)return;S.genre=p.genre;S.sel=JSON.parse(JSON.stringify(p.sel));save();renderAll();toast("「"+n+"」を読み込みました")}
+function savePreset(){const n=prompt("プリセット名");if(!n)return;S.presets[n]={genre:S.genre,sel:JSON.parse(JSON.stringify(S.sel))};save();renderPresets();toast("保存しました")}
+function renderAll(){renderGenres();renderCats();renderPrompt();renderPresets()}
+$("#globalRef").append(refBox("__global"));
+$("#copy").onclick=async()=>{const t=promptText();try{await navigator.clipboard.writeText(t)}catch{const a=el("textarea",{value:t});document.body.append(a);a.select();document.execCommand("copy");a.remove()}toast("コピーしました")};
+$("#savePre").onclick=$("#savePre2").onclick=savePreset;
+$("#loadPre").onclick=()=>{const k=Object.keys(S.presets);if(!k.length)return toast("プリセットがありません");const n=prompt("読み込むプリセット名:\n"+k.join("\n"),k[k.length-1]);if(n)loadPreset(n)};
+$("#clearSel").onclick=()=>{if(confirm("選択をすべて解除しますか?")){S.sel={};save();renderAll()}};
+$("#exp").onclick=async()=>{await dbp;const blob=new Blob([JSON.stringify({app:"chara-picker",version:1,state:S,images:await allImg()})],{type:"application/json"});const a=el("a",{href:URL.createObjectURL(blob),download:"chara-picker-"+new Date().toISOString().slice(0,10)+".json"});document.body.append(a);a.click();a.remove()};
+$("#impB").onclick=()=>$("#imp").click();
+$("#imp").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!d.state)throw 0;if(!confirm("現在のデータを置き換えますか?"))return;S=d.state;save();await dbp;await idb(tx("readwrite").clear());for(const i of d.images||[])await idb(tx("readwrite").put(i));renderAll();toast("インポートしました")}catch{alert("JSONの形式が正しくありません")}e.target.value=""};
+renderAll();
+</script></body></html>
